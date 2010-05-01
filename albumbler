@@ -1,0 +1,206 @@
+#! /usr/bin/env python
+
+import subprocess, os, random, time, sys
+import cPickle as pickle
+
+music_paths = ['/mnt/music/']
+playlist_exts = ['.m3u']
+time_window = 60
+max_playlist = 1000
+notify = "console"
+player = "mocp"
+
+"""
+playlist is a list of all directories.
+
+skiplist is a list of what/when was played
+[ [skipped, skipped, skipped, listened, time], ... ]
+Anything less than time_window is considered as skipped.
+"""
+
+# $xdg_config_home for config
+# support for more players
+# support more notifications
+# man page
+# berkely db?
+# rewrite in not python?
+
+def xdg_paths():
+    j = os.path.join
+    e = os.getenv
+    config = e('XDG_CONFIG_HOME', j(e('HOME'), '.config'))
+    config = j(config, 'albumbler', 'albumbler.config')
+    cache = e('XDG_CACHE_HOME', j(e('HOME'), '.cache'))
+    cache = j(cache, 'albumbler', 'albumbler.pickle')
+    return config, cache
+
+config_path, cache_path = xdg_paths()  # probably dumb to do this here
+
+def call(string):
+    pipe = subprocess.PIPE
+    return subprocess.call(string, stdout=pipe, shell=True)
+
+def dir_tree(dir_root):
+    tree = list(os.walk(dir_root))
+    dirs = [t[0] for t in tree]
+    playlists = [os.path.join(t[0],f) for t in tree for f in t[2] if os.path.splitext(f)[1] in playlist_exts]
+    return dirs + playlists
+
+def reasonable_dir(path):
+    "Estimates size of recursive add."
+    if not os.path.isdir(path):  # assume any custom playlists are reasonable
+        return True
+    length = 0
+    for w in os.walk(path):
+        length += len(w[2])
+        if length > max_playlist:
+            return False
+    return True
+
+def process(name):
+    return not call('pgrep %s' % name)
+
+def resync():
+    playlist, skiplist = load()
+    old_len = len(playlist)
+    playlist = []
+    print 'Walking', music_paths
+    [playlist.extend(dir_tree(mp)) for mp in music_paths]
+    pickle.dump((playlist, skiplist), open(cache_path, 'wb'), -1)
+    new_len = len(playlist)
+    print 'Index: added %i, total %i' % (new_len-old_len, new_len)
+
+def ranking():
+    playlist, skiplist = load()
+    fav_list = [skips[-2] for skips in skiplist]
+    bad_list = []
+    [bad_list.extend(skips[:-2]) for skips in skiplist]
+    fav_count = dict((f,0.0) for f in set(fav_list) | set(bad_list))
+    for f in fav_list:
+        fav_count[f] += 1.0
+    for b in bad_list:
+        fav_count[b] -= 0.1
+    fav_tally = [(c,f) for f,c in fav_count.iteritems()]
+    return fav_tally
+
+def show_favorites():
+    fav_tally = ranking()
+    fav_tally.sort()
+    fav_tally.reverse()
+    for c,f in fav_tally[:100]:
+        print f
+
+def show_worst():
+    fav_tally = ranking()
+    fav_tally.sort()
+    for c,f in fav_tally[:100]:
+        print f
+
+def update_skiplist(playlist, skiplist, play):
+    now_time = time.time()
+    if len(skiplist) == 0:
+        skiplist.append([play, now_time])
+        pickle.dump((playlist, skiplist), open(cache_path, 'wb'), -1)
+        return
+    last_time = skiplist[-1][-1]
+    if now_time - last_time < time_window:
+        skiplist[-1].pop()  # last_time
+        skiplist[-1].append(play)
+        skiplist[-1].append(now_time)
+    else:
+        skiplist.append([play, now_time])
+    pickle.dump((playlist, skiplist), open(cache_path, 'wb'), -1)
+
+def load():
+    if not os.path.isdir(os.path.dirname(cache_path)):
+        os.makedirs(os.path.dirname(cache_path))
+    if not os.path.isfile(cache_path):
+        pickle.dump(([],[]), open(cache_path, 'wb'), -1)
+    return pickle.load(open(cache_path, 'rb'))
+
+def scale_many(d, scale, paths):
+    for p in paths:
+        if p in d:
+            d[p] *= scale
+    return d
+
+def weighted2(playlist, skiplist):
+    playdict = dict((path, 1.0) for path in playlist)
+    if len(skiplist) == 0:
+        # first time user
+        return playdict
+    now_time = time.time()
+    last_time = skiplist[-1][-1]
+    if now_time - last_time > time_window:
+        # called first time, avoid common
+        all_heard = (p for skips in skiplist for p in skips[:-1])
+        playdict = scale_many(playdict, 0.25, all_heard)
+        return playdict
+    # called multiple times, do the fancy stuff
+    recent = set(skiplist[-1][:-1])
+    dislikes = [recent]
+    all_dislikes = set(recent)
+    all_skipped = [set(skips[:-2]) for skips in skiplist]
+    # walk the map, discard repeats
+    while dislikes[-1]:
+        associated = set([])
+        [associated.update(skips) for skips in all_skipped if skips & dislikes[-1]]
+        associated.difference_update(all_dislikes)
+        #print len(dislikes[-1]), len(associated), len(all_dislikes)
+        dislikes.append(associated)
+        all_dislikes.update(associated)
+    # dislikes now holds map distances
+    # todo: distance never above 4?
+    dis_fn = lambda x: (2**x-1)/(2.0**x)
+    for i,d in enumerate(dislikes):
+        playdict = scale_many(playdict, dis_fn(i), d)
+    # avoid things similar to recent
+    #all_skipped = [set(skips[:-2]) for skips in skiplist]
+    #similar = [p for skips in all_skipped if skips & recent for p in skips]
+    # todo: be fancy and compute each distance to recent
+    #playdict = scale_many(playdict, 0.50, similar)
+    #print sorted((b,a) for a,b in playdict.items() if b != 1.0)
+    return playdict
+
+def main():
+    # use real argv parsing
+    if len(sys.argv) == 2:
+        if sys.argv[1] == 'sync':
+            resync()
+            return
+        elif sys.argv[1] == 'best':
+            show_favorites()
+            return
+        elif sys.argv[1] == 'worst':
+            show_worst()
+            return
+        else:
+            print "supported options are 'sync', 'best' or 'worst'"
+            return
+    playlist, skiplist = load()
+    playdict = weighted2(playlist, skiplist)
+    while True:
+        play = random.choice(playdict.keys())
+        odds = playdict[play]
+        print play, '?'
+        #if not os.path.isdir(play):
+        #    continue
+        if not reasonable_dir(play):
+            playdict[play] = 0.0
+            continue
+        if random.random() < odds:
+            break
+    update_skiplist(playlist, skiplist, play)
+    
+    if notify == 'console':
+        print play
+    if player == 'mocp':
+        call('mocp --clear')
+        call('mocp --append "%s"' % play)
+        #call('mocp --sync')
+        call('mocp --play')
+
+if __name__ == '__main__':
+    main()
+
+
