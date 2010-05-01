@@ -1,17 +1,19 @@
 #! /usr/bin/env python
 
-import subprocess, os, random, time, sys
+import subprocess, os, random, time, sys, ConfigParser
 import cPickle as pickle
 
-music_paths = ['/mnt/music/']
+# defaults
 playlist_exts = ['.m3u']
-time_window = 60
-max_playlist = 1000
-notify = "console"
-player = "mocp"
+conf = {
+    'music_paths': [os.getenv('HOME')],
+    'time_window': 60.0,
+    'max_playlist': 1000,
+    'notify': 'console',
+    'player': 'mocp'}
 
 """
-playlist is a list of all directories.
+playlist is a cached list of all directories/playlists.
 
 skiplist is a list of what/when was played
 [ [skipped, skipped, skipped, listened, time], ... ]
@@ -24,6 +26,7 @@ Anything less than time_window is considered as skipped.
 # man page
 # berkely db?
 # rewrite in not python?
+# context sensitive?
 
 def xdg_paths():
     j = os.path.join
@@ -53,7 +56,7 @@ def reasonable_dir(path):
     length = 0
     for w in os.walk(path):
         length += len(w[2])
-        if length > max_playlist:
+        if length > conf['max_playlist']:
             return False
     return True
 
@@ -61,17 +64,17 @@ def process(name):
     return not call('pgrep %s' % name)
 
 def resync():
-    playlist, skiplist = load()
+    playlist, skiplist = load_cache()
     old_len = len(playlist)
     playlist = []
-    print 'Walking', music_paths
-    [playlist.extend(dir_tree(mp)) for mp in music_paths]
+    print 'Walking', conf['music_paths']
+    [playlist.extend(dir_tree(mp)) for mp in conf['music_paths']]
     pickle.dump((playlist, skiplist), open(cache_path, 'wb'), -1)
     new_len = len(playlist)
     print 'Index: added %i, total %i' % (new_len-old_len, new_len)
 
 def ranking():
-    playlist, skiplist = load()
+    playlist, skiplist = load_cache()
     fav_list = [skips[-2] for skips in skiplist]
     bad_list = []
     [bad_list.extend(skips[:-2]) for skips in skiplist]
@@ -103,7 +106,7 @@ def update_skiplist(playlist, skiplist, play):
         pickle.dump((playlist, skiplist), open(cache_path, 'wb'), -1)
         return
     last_time = skiplist[-1][-1]
-    if now_time - last_time < time_window:
+    if now_time - last_time < conf['time_window']:
         skiplist[-1].pop()  # last_time
         skiplist[-1].append(play)
         skiplist[-1].append(now_time)
@@ -111,12 +114,34 @@ def update_skiplist(playlist, skiplist, play):
         skiplist.append([play, now_time])
     pickle.dump((playlist, skiplist), open(cache_path, 'wb'), -1)
 
-def load():
+def load_cache():
     if not os.path.isdir(os.path.dirname(cache_path)):
         os.makedirs(os.path.dirname(cache_path))
     if not os.path.isfile(cache_path):
         pickle.dump(([],[]), open(cache_path, 'wb'), -1)
     return pickle.load(open(cache_path, 'rb'))
+
+def load_config():
+    global conf
+    cp = ConfigParser.RawConfigParser()
+    if not os.path.isdir(os.path.dirname(config_path)):
+        os.makedirs(os.path.dirname(config_path))
+    if not os.path.isfile(config_path):
+        # create default file
+        cp.add_section('Settings')
+        cp.set('Settings', 'MusicPaths', ','.join(conf['music_paths']))
+        cp.set('Settings', 'TimeWindow', str(conf['time_window']))
+        cp.set('Settings', 'MaxPlaylist', str(conf['max_playlist']))
+        cp.set('Settings', 'Notify', str(conf['notify']))
+        cp.set('Settings', 'Player', str(conf['player']))
+        cp.write(open(config_path, 'wb'))
+    cp = ConfigParser.RawConfigParser()
+    cp.read(config_path)
+    conf['music_paths'] = cp.get('Settings', 'MusicPaths').split(',')
+    conf['time_window'] = cp.getfloat('Settings', 'TimeWindow')
+    conf['max_playlist'] = cp.getint('Settings', 'MaxPlaylist')
+    conf['notify'] = cp.get('Settings', 'Notify')
+    conf['player'] = cp.get('Settings', 'Player')
 
 def scale_many(d, scale, paths):
     for p in paths:
@@ -131,7 +156,7 @@ def weighted2(playlist, skiplist):
         return playdict
     now_time = time.time()
     last_time = skiplist[-1][-1]
-    if now_time - last_time > time_window:
+    if now_time - last_time > conf['time_window']:
         # called first time, avoid common
         all_heard = (p for skips in skiplist for p in skips[:-1])
         playdict = scale_many(playdict, 0.25, all_heard)
@@ -163,6 +188,7 @@ def weighted2(playlist, skiplist):
     return playdict
 
 def main():
+    load_config()
     # use real argv parsing
     if len(sys.argv) == 2:
         if sys.argv[1] == 'sync':
@@ -177,12 +203,16 @@ def main():
         else:
             print "supported options are 'sync', 'best' or 'worst'"
             return
-    playlist, skiplist = load()
+    playlist, skiplist = load_cache()
+    if not playlist:
+        print 'Set musicpath in .config/albumbler/albumbler.config'
+        print 'And run "albumbler sync"'
+        return
     playdict = weighted2(playlist, skiplist)
     while True:
         play = random.choice(playdict.keys())
         odds = playdict[play]
-        print play, '?'
+        #print play, '?'
         #if not os.path.isdir(play):
         #    continue
         if not reasonable_dir(play):
@@ -192,9 +222,9 @@ def main():
             break
     update_skiplist(playlist, skiplist, play)
     
-    if notify == 'console':
+    if conf['notify'] == 'console':
         print play
-    if player == 'mocp':
+    if conf['player'] == 'mocp':
         call('mocp --clear')
         call('mocp --append "%s"' % play)
         #call('mocp --sync')
