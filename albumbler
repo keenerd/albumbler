@@ -1,5 +1,8 @@
 #! /usr/bin/env python
 
+# Copyright Kyle Keen 2010
+# gpl v2
+
 import subprocess, os, random, time, sys, ConfigParser
 import cPickle as pickle
 
@@ -20,7 +23,6 @@ skiplist is a list of what/when was played
 Anything less than time_window is considered as skipped.
 """
 
-# $xdg_config_home for config
 # support for more players
 # support more notifications
 # man page
@@ -59,6 +61,15 @@ def reasonable_dir(path):
         if length > conf['max_playlist']:
             return False
     return True
+
+def list_files(path):
+    "For spoon feeding some players."
+    if os.path.splitext(path)[1] in playlist_exts:
+        return open(path).read()
+    if not os.path.isdir(path):
+        return ''
+    all_files = [os.path.join(p,f) for p,d,files in os.walk(path) for f in files]
+    return '\n'.join(all_files)
 
 def process(name):
     return not call('pgrep %s' % name)
@@ -229,6 +240,10 @@ def main():
         call('mocp --append "%s"' % play)
         #call('mocp --sync')
         call('mocp --play')
+    if conf['player'] == 'mpc':
+        call('mpc clear')
+        call('mpc add %s' % list_files(play))
+        call('mpc play')
 
 if __name__ == '__main__':
     main()
