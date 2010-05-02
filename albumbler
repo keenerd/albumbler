@@ -235,6 +235,8 @@ def main():
     
     if conf['notify'] == 'console':
         print play
+    if conf['notify'] == 'notify-send':
+        call('notify-send "Now Playing: %s"' % os.path.basename(play))
     if conf['player'] == 'mocp':
         call('mocp --clear')
         call('mocp --append "%s"' % play)
