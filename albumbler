@@ -248,6 +248,10 @@ def main():
         call('cmus-remote -c')
         call('cmus-remote "%s"' % play)
         call('cmus-remote -C "view 3" "win-activate"')
+    if conf['player'] == 'rhythmbox':
+        call('rhythmbox-client --no-start --clear-queue')
+        call('rhythmbox-client --no-start --play-uri="%s"' % play)
+        call('rhythmbox-client --no-start --play')
 
 if __name__ == '__main__':
     main()
