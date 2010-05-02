@@ -64,8 +64,10 @@ def reasonable_dir(path):
 
 def list_files(path):
     "For spoon feeding some players."
+    j = os.path.join
     if os.path.splitext(path)[1] in playlist_exts:
-        return open(path).read().split('\n')
+        dn = os.path.dirname(path)
+        return [j(dn, track) for track in  open(path).read().split('\n')]
     if not os.path.isdir(path):
         return ''
     return [os.path.join(p,f) for p,d,files in os.walk(path) for f in files]
