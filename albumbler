@@ -254,6 +254,10 @@ def main():
         call('rhythmbox-client --no-start --clear-queue')
         call('rhythmbox-client --no-start --play-uri="%s"' % play)
         call('rhythmbox-client --no-start --play')
+    if conf['player'] == 'audacious':
+        call('audtool --playlist-clear')
+        call('audtool --playlist-addurl "%s"' % play)
+        call('audtool --playback-play')
 
 if __name__ == '__main__':
     main()
