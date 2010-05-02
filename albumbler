@@ -244,6 +244,10 @@ def main():
         call('mpc clear')
         call('mpc add %s' % list_files(play))
         call('mpc play')
+    if conf['player'] == 'cmus':
+        call('cmus-remote -c')
+        call('cmus-remote "%s"' % play)
+        call('cmus-remote -C "view 3" "win-activate"')
 
 if __name__ == '__main__':
     main()
