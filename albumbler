@@ -263,7 +263,7 @@ def main():
         #call('mocp --sync')
         call('mocp --play')
     if conf['player'] == 'mpd':
-        tracks = [strip_dirs(track, conf['musicpaths']) for track in list_files(play)]
+        tracks = [strip_dirs(track, conf['music_paths']) for track in list_files(play)]
         port(6600, 'clear')
         [port(6600, 'add "%s"' % track) in tracks]
         port(6600, 'play')
