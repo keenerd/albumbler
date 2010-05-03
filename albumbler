@@ -264,9 +264,9 @@ def main():
         call('mocp --play')
     if conf['player'] == 'mpd':
         tracks = [strip_dirs(track, conf['music_paths']) for track in list_files(play)]
-        port(6600, 'clear')
-        [port(6600, 'add "%s"' % track) in tracks]
-        port(6600, 'play')
+        port(6600, 'clear\n')
+        [port(6600, 'add "%s"\n' % track) in tracks]
+        port(6600, 'play\n')
     if conf['player'] == 'cmus':
         call('cmus-remote -c')
         call('cmus-remote "%s"' % play)
