@@ -3,7 +3,7 @@
 # Copyright Kyle Keen 2010
 # gpl v2
 
-import subprocess, os, random, time, sys, ConfigParser
+import subprocess, os, random, time, sys, ConfigParser, socket
 import cPickle as pickle
 
 # defaults
@@ -45,6 +45,15 @@ def call(string):
     pipe = subprocess.PIPE
     return subprocess.call(string, stdout=pipe, shell=True)
 
+def port(number, message):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    #sock.setblocking(0)
+    sock.connect(('localhost', number))
+    sock.send(message)
+    reply = sock.recv(16384)  # 16k ought to be more than enough for anyone
+    sock.close()
+    return reply
+
 def dir_tree(dir_root):
     tree = list(os.walk(dir_root))
     dirs = [t[0] for t in tree]
@@ -71,6 +80,16 @@ def list_files(path):
     if not os.path.isdir(path):
         return ''
     return [os.path.join(p,f) for p,d,files in os.walk(path) for f in files]
+
+def strip_dirs(track, dirs):
+    # fix yucky nesting
+    for d in dirs:
+        if track.startswith(d):
+            track = track[len(d):]
+            if track.startswith('/'):
+                track = track[1:]
+            return track
+    return track
 
 def process(name):
     return not call('pgrep %s' % name)
@@ -243,10 +262,11 @@ def main():
         call('mocp --append "%s"' % play)
         #call('mocp --sync')
         call('mocp --play')
-    if conf['player'] == 'mpc':
-        call('mpc clear')
-        [call('mpc add "%s"' % track) for track in list_files(play)]
-        call('mpc play')
+    if conf['player'] == 'mpd':
+        tracks = [strip_dirs(track, conf['musicpaths']) for track in list_files(play)]
+        port(6600, 'clear')
+        [port(6600, 'add "%s"' % track) in tracks]
+        port(6600, 'play')
     if conf['player'] == 'cmus':
         call('cmus-remote -c')
         call('cmus-remote "%s"' % play)
@@ -262,5 +282,4 @@ def main():
 
 if __name__ == '__main__':
     main()
-
 
