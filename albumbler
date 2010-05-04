@@ -35,7 +35,7 @@ def xdg_paths():
     e = os.getenv
     config = e('XDG_CONFIG_HOME', j(e('HOME'), '.config'))
     config = j(config, 'albumbler', 'albumbler.config')
-    cache = e('XDG_CACHE_HOME', j(e('HOME'), '.cache'))
+    cache = e('XDG_DATA_HOME', j(e('HOME'), '.local/share'))
     cache = j(cache, 'albumbler', 'albumbler.pickle')
     return config, cache
 
