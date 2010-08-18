@@ -281,7 +281,7 @@ def main():
         call('audtool --playlist-clear')
         [call('audtool --playlist-addurl "%s"' % track) for track in list_files(play)]
         call('audtool --playback-play')
-    if conf['player'] == 'gmusicbrowser'
+    if conf['player'] == 'gmusicbrowser':
         call('gmusicbrowser -play -playlist "%s"' % play)
 
 if __name__ == '__main__':
