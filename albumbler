@@ -29,6 +29,9 @@ Anything less than time_window is considered as skipped.
 # berkely db?
 # rewrite in not python?
 # context sensitive?
+# add -forget
+# tapered dislike between 1 minute and 1 hour
+# make some sort of album fingerprinting
 
 def xdg_paths():
     j = os.path.join
@@ -271,13 +274,15 @@ def main():
         call('cmus-remote "%s"' % play)
         call('cmus-remote -C "view 3" "win-activate"')
     if conf['player'] == 'rhythmbox':
-        call('rhythmbox-client --no-start --clear-queue')
-        call('rhythmbox-client --no-start --play-uri="%s"' % play)
-        call('rhythmbox-client --no-start --play')
+        call('rhythmbox-client --clear-queue')
+        [call('rhythmbox-client --play-uri="%s"' % track) for track in list_files(play)]
+        call('rhythmbox-client --play')
     if conf['player'] == 'audacious':
         call('audtool --playlist-clear')
         [call('audtool --playlist-addurl "%s"' % track) for track in list_files(play)]
         call('audtool --playback-play')
+    if conf['player'] == 'gmusicbrowser'
+        call('gmusicbrowser -play -playlist "%s"' % play)
 
 if __name__ == '__main__':
     main()
