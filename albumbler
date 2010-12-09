@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env python2
 
 # Copyright Kyle Keen 2010
 # gpl v2
@@ -260,6 +260,8 @@ def main():
         print play
     if conf['notify'] == 'notify-send':
         call('notify-send "Now Playing: %s"' % os.path.basename(play))
+    if conf['notify'] == 'ratpoison':
+        call('ratpoison -c "echo Now Playing: %s"' % os.path.basename(play))
     if conf['player'] == 'mocp':
         call('mocp --clear')
         call('mocp --append "%s"' % play)
@@ -283,6 +285,10 @@ def main():
         call('audtool --playback-play')
     if conf['player'] == 'gmusicbrowser':
         call('gmusicbrowser -play -playlist "%s"' % play)
+    if conf['player'] == 'xmms2':
+        call('nyxmms2 remove "*"')
+        call('nyxmms2 add "%s"' % play)
+        call('nyxmms2 play')
 
 if __name__ == '__main__':
     main()
