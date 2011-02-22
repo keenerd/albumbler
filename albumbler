@@ -97,9 +97,6 @@ def strip_dirs(track, dirs):
             return track
     return track
 
-def process(name):
-    return not call('pgrep %s' % name)
-
 def resync():
     playlist, skiplist = load_cache()
     old_len = len(playlist)
@@ -255,28 +252,23 @@ def main():
     if len(sys.argv) == 2:
         if sys.argv[1] == 'sync':
             resync()
-            return
         elif sys.argv[1] == 'best':
             show_favorites()
-            return
         elif sys.argv[1] == 'worst':
             show_worst()
-            return
         else:
-            print "supported options are 'sync', 'best' or 'worst'"
-            return
+            print "Supported options are 'sync', 'best' or 'worst'."
+            print "For normal use, call without options."
+        return
     playlist, skiplist = load_cache()
     if not playlist:
-        print 'Set musicpath in .config/albumbler/albumbler.config'
+        print 'Set musicpath in %s' % config_path
         print 'And run "albumbler sync"'
         return
     playdict = weighted2(playlist, skiplist)
     while True:
         play = random.choice(playdict.keys())
         odds = playdict[play]
-        #print play, '?'
-        #if not os.path.isdir(play):
-        #    continue
         if not reasonable_dir(play):
             playdict[play] = 0.0
             continue
