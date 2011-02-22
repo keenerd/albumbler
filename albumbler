@@ -73,9 +73,7 @@ def reasonable_dir(path):
         length += len(w[2])
         if length > conf['max_playlist']:
             return False
-    if length < conf['min_playlist']:
-        return False
-    return True
+    return length > conf['min_playlist']:
 
 def list_files(path):
     "For spoon feeding some players."
@@ -227,24 +225,19 @@ def weighted2(playlist, skiplist):
     return playdict
 
 def play_tunes(play):
-    f = {'mocp': ('mocp --clear', 
-                  'mocp --append "%s"' % play, 
-                  'mocp --play'),
-         'cmus': ('cmus-remote -c',
-                  'cmus-remote "%s"' % play,
-                  'cmus-remote "%s"' % play),
-         'xmms2': ('nyxmms2 remove "*"',
-                   'nyxmms2 add "%s"' % play,
-                   'nyxmms2 play'),
-         'clementine': ('clementine -s',
-                        'clementine -l "%s"' % play,
-                        'clementine -p'),
-         'gmusicbrowser':('gmusicbrowser -play -playlist "%s"' % play,),
+    # player : (command, args, args, ...)
+    f = {'mocp': ('mocp', '--clear', '--append "%s"' % play, '--play'),
+         'cmus': ('cmus-remote', '-c', '"%s"' % play,
+                  '-C "view 3" "win-activate"'),
+         'xmms2': ('nyxmms2', 'remove "*"', 'add "%s"' % play, 'play'),
+         'clementine': ('clementine', '-s', '-l "%s"' % play, '-p'),
+         'gmusicbrowser':('gmusicbrowser', '-play -playlist "%s"' % play),
         }
     player = conf['player']
     if player not in f:
         return
-    [call(command) for command in f[player]]
+    command = f[player][0]
+    [call('%s %s' % (command, arg)) for arg in f[player][1:]]
 
 def main():
     load_config()
