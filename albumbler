@@ -43,7 +43,7 @@ def xdg_paths():
     cache = j(cache, 'albumbler', 'albumbler.pickle')
     return config, cache
 
-config_path, cache_path = xdg_paths()  # probably dumb to do this here
+config_path, cache_path = xdg_paths()  # probably dumb to do this globally
 
 def call(string):
     pipe = subprocess.PIPE
@@ -229,6 +229,26 @@ def weighted2(playlist, skiplist):
     #print sorted((b,a) for a,b in playdict.items() if b != 1.0)
     return playdict
 
+def play_tunes(play):
+    f = {'mocp': ('mocp --clear', 
+                  'mocp --append "%s"' % play, 
+                  'mocp --play'),
+         'cmus': ('cmus-remote -c',
+                  'cmus-remote "%s"' % play,
+                  'cmus-remote "%s"' % play),
+         'xmms2': ('nyxmms2 remove "*"',
+                   'nyxmms2 add "%s"' % play,
+                   'nyxmms2 play'),
+         'clementine': ('clementine -s',
+                        'clementine -l "%s"' % play,
+                        'clementine -p'),
+         'gmusicbrowser':('gmusicbrowser -play -playlist "%s"' % play,),
+        }
+    player = conf['player']
+    if player not in f:
+        return
+    [call(command) for command in f[player]]
+
 def main():
     load_config()
     # use real argv parsing
@@ -264,43 +284,28 @@ def main():
             break
     update_skiplist(playlist, skiplist, play)
     
+    # add parallel notifications
     if conf['notify'] == 'console':
         print play
     if conf['notify'] == 'notify-send':
         call('notify-send "Now Playing: %s"' % os.path.basename(play))
     if conf['notify'] == 'ratpoison':
         call('ratpoison -c "echo Now Playing: %s"' % os.path.basename(play))
-    if conf['player'] == 'mocp':
-        call('mocp --clear')
-        call('mocp --append "%s"' % play)
-        #call('mocp --sync')
-        call('mocp --play')
-    if conf['player'] == 'mpd':
+    play_tunes(play)
+    # but some don't template well
+    player = conf['player']
+    if player == 'mpd':
         port(6600, 'clear\n')
         port(6600, 'add "%s"\n' % strip_dirs(play, conf['music_paths']))
         port(6600, 'play\n')
-    if conf['player'] == 'cmus':
-        call('cmus-remote -c')
-        call('cmus-remote "%s"' % play)
-        call('cmus-remote -C "view 3" "win-activate"')
-    if conf['player'] == 'rhythmbox':
+    if player == 'rhythmbox':
         call('rhythmbox-client --clear-queue')
         [call('rhythmbox-client --play-uri="%s"' % track) for track in list_files(play)]
         call('rhythmbox-client --play')
-    if conf['player'] == 'audacious':
+    if player == 'audacious':
         call('audtool --playlist-clear')
         [call('audtool --playlist-addurl "%s"' % track) for track in list_files(play)]
         call('audtool --playback-play')
-    if conf['player'] == 'gmusicbrowser':
-        call('gmusicbrowser -play -playlist "%s"' % play)
-    if conf['player'] == 'xmms2':
-        call('nyxmms2 remove "*"')
-        call('nyxmms2 add "%s"' % play)
-        call('nyxmms2 play')
-    if conf['player'] == 'clementine':
-        call('clementine -s')
-        call('clementine -l "%s"' % play)
-        call('clementine -p')
 
 if __name__ == '__main__':
     main()
