@@ -297,6 +297,10 @@ def main():
         call('nyxmms2 remove "*"')
         call('nyxmms2 add "%s"' % play)
         call('nyxmms2 play')
+    if conf['player'] == 'clementine':
+        call('clementine -s')
+        call('clementine -l "%s"' % play)
+        call('clementine -p')
 
 if __name__ == '__main__':
     main()
