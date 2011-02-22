@@ -1,6 +1,6 @@
 # Contributor: Kyle Keen <keenerd@gmail.com>
 pkgname=albumbler
-pkgver=20101209
+pkgver=20110222
 pkgrel=1
 pkgdesc="Like StumbleUpon for your music, it learns what you don't like."
 arch=('any')
@@ -12,11 +12,10 @@ optdepends=('mocp: for music' \
             'cmus: for music' \
             'mpd: for music')
 source=(http://kmkeen.com/$pkgname/$pkgname)
-md5sums=('00e2bdec9842f628e6d2a5cd6cf8478f')
+md5sums=('659f925eb83fb58a98456af4129667b5')
 
 package	() {
   cd "$srcdir"
-  #sed -i 's|/usr/bin/env python|/usr/bin/env python2|' albumbler
   install -D -m 0755 albumbler "$pkgdir"/usr/bin/albumbler
 }
 
