@@ -12,6 +12,7 @@ conf = {
     'music_paths': [os.getenv('HOME')],
     'time_window': 60.0,
     'max_playlist': 1000,
+    'min_playlist': 3,
     'notify': 'console',
     'player': 'mocp'}
 
@@ -72,6 +73,8 @@ def reasonable_dir(path):
         length += len(w[2])
         if length > conf['max_playlist']:
             return False
+    if length < conf['min_playlist']:
+        return False
     return True
 
 def list_files(path):
@@ -166,6 +169,7 @@ def load_config():
         cp.set('Settings', 'MusicPaths', ','.join(conf['music_paths']))
         cp.set('Settings', 'TimeWindow', str(conf['time_window']))
         cp.set('Settings', 'MaxPlaylist', str(conf['max_playlist']))
+        cp.set('Settings', 'MinPlaylist', str(conf['min_playlist']))
         cp.set('Settings', 'Notify', str(conf['notify']))
         cp.set('Settings', 'Player', str(conf['player']))
         cp.write(open(config_path, 'wb'))
@@ -176,6 +180,10 @@ def load_config():
     conf['max_playlist'] = cp.getint('Settings', 'MaxPlaylist')
     conf['notify'] = cp.get('Settings', 'Notify')
     conf['player'] = cp.get('Settings', 'Player')
+    try:  # ewww, hacky
+        conf['min_playlist'] = cp.getint('Settings', 'MinPlaylist')
+    except ConfigParser.NoOptionError:
+        pass
 
 def scale_many(d, scale, paths):
     for p in paths:
