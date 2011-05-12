@@ -7,14 +7,14 @@ import subprocess, os, random, time, sys, ConfigParser, socket
 import cPickle as pickle
 
 # defaults
-playlist_exts = ['.m3u']
 conf = {
     'music_paths': [os.getenv('HOME')],
     'time_window': 60.0,
     'max_playlist': 1000,
     'min_playlist': 3,
     'notify': 'console',
-    'player': 'mocp'}
+    'player': 'mocp',
+    'playlist_exts': ['m3u']}
 
 """
 playlist is a cached list of all directories/playlists.
@@ -61,7 +61,7 @@ def port(number, message):
 def dir_tree(dir_root):
     tree = list(os.walk(dir_root))
     dirs = [t[0] for t in tree]
-    playlists = [os.path.join(t[0],f) for t in tree for f in t[2] if os.path.splitext(f)[1] in playlist_exts]
+    playlists = [os.path.join(t[0],f) for t in tree for f in t[2] if os.path.splitext(f)[1][1:] in conf['playlist_exts']]
     return dirs + playlists
 
 def reasonable_dir(path):
@@ -73,12 +73,12 @@ def reasonable_dir(path):
         length += len(w[2])
         if length > conf['max_playlist']:
             return False
-    return length > conf['min_playlist']:
+    return length > conf['min_playlist']
 
 def list_files(path):
     "For spoon feeding some players."
     j = os.path.join
-    if os.path.splitext(path)[1] in playlist_exts:
+    if os.path.splitext(path)[1][1:] in conf['playlist_exts']:
         dn = os.path.dirname(path)
         return [j(dn, track) for track in  open(path).read().split('\n')]
     if not os.path.isdir(path):
@@ -167,6 +167,7 @@ def load_config():
         cp.set('Settings', 'MinPlaylist', str(conf['min_playlist']))
         cp.set('Settings', 'Notify', str(conf['notify']))
         cp.set('Settings', 'Player', str(conf['player']))
+        cp.set('Settings', 'PlaylistExts', ','.join(conf['playlist_exts']))
         cp.write(open(config_path, 'wb'))
     cp = ConfigParser.RawConfigParser()
     cp.read(config_path)
@@ -175,7 +176,12 @@ def load_config():
     conf['max_playlist'] = cp.getint('Settings', 'MaxPlaylist')
     conf['notify'] = cp.get('Settings', 'Notify')
     conf['player'] = cp.get('Settings', 'Player')
-    try:  # ewww, hacky
+    # make a graceful upgrade path
+    try:
+        conf['playlist_exts'] = cp.get('Settings', 'PlaylistExts').split(',')
+    except ConfigParser.NoOptionError:
+        pass
+    try:
         conf['min_playlist'] = cp.getint('Settings', 'MinPlaylist')
     except ConfigParser.NoOptionError:
         pass
