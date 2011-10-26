@@ -250,6 +250,7 @@ def play_tunes(play):
          'xmms2': ('nyxmms2', 'remove "*"', 'add "%s"' % play, 'play'),
          'clementine': ('clementine', '-s', '-l "%s"' % play, '-p'),
          'gmusicbrowser':('gmusicbrowser', '-play -playlist "%s"' % play),
+         'mpc': ('mpc', 'clear', 'add "%s"\n' % strip_dirs(play, conf['music_paths']), 'play'),
         }
     player = conf['player']
     if player not in f:
@@ -301,10 +302,6 @@ def main():
         port(6600, 'clear\n')
         port(6600, 'add "%s"\n' % strip_dirs(play, conf['music_paths']))
         port(6600, 'play\n')
-    if player == 'mpc':
-        call('mpc clear\n')
-        call('mpc add "%s"\n' % strip_dirs(play, conf['music_paths']))
-        call('mpc play\n')
     if player == 'rhythmbox':
         call('rhythmbox-client --clear-queue')
         [call('rhythmbox-client --play-uri="%s"' % track) for track in list_files(play)]
