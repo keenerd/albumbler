@@ -51,13 +51,9 @@ def call(string):
     pipe = subprocess.PIPE
     return subprocess.call(string, stdout=pipe, shell=True)
 
-def port(host=None, number=None, message):
-    if host is None:
-        host = 'localhost'
-    if number is None:
-        number = 6600
+def port(host, number, message):
     if type(number) == str:
-        number == int(number)
+        number = int(number)
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     #sock.setblocking(0)
     sock.connect((host, number))
@@ -305,8 +301,8 @@ def main():
     # but some don't template well
     player = conf['player']
     if player == 'mpd':
-        host = os.getenv('MPD_HOST')
-        pnum = os.getenv('MPD_PORT')
+        host = os.getenv('MPD_HOST', 'locahost')
+        pnum = os.getenv('MPD_PORT', 6600)
         port(host, pnum, 'clear\n')
         port(host, pnum, 'add "%s"\n' % strip_dirs(play, conf['music_paths']))
         port(host, pnum, 'play\n')
