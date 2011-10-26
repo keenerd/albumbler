@@ -27,7 +27,7 @@ Anything less than time_window is considered as skipped.
 # support for more players
 # support more notifications
 # man page
-# berkely db?
+# berkely db? sqlite?
 # rewrite in not python?
 # context sensitive?
 # add -forget
@@ -51,10 +51,16 @@ def call(string):
     pipe = subprocess.PIPE
     return subprocess.call(string, stdout=pipe, shell=True)
 
-def port(number, message):
+def port(host=None, number=None, message):
+    if host is None:
+        host = 'localhost'
+    if number is None:
+        number = 6600
+    if type(number) == str:
+        number == int(number)
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     #sock.setblocking(0)
-    sock.connect(('localhost', number))
+    sock.connect((host, number))
     sock.send(message)
     reply = sock.recv(16384)  # 16k ought to be more than enough for anyone
     sock.close()
@@ -299,9 +305,11 @@ def main():
     # but some don't template well
     player = conf['player']
     if player == 'mpd':
-        port(6600, 'clear\n')
-        port(6600, 'add "%s"\n' % strip_dirs(play, conf['music_paths']))
-        port(6600, 'play\n')
+        host = os.getenv('MPD_HOST')
+        pnum = os.getenv('MPD_PORT')
+        port(host, pnum, 'clear\n')
+        port(host, pnum, 'add "%s"\n' % strip_dirs(play, conf['music_paths']))
+        port(host, pnum, 'play\n')
     if player == 'rhythmbox':
         call('rhythmbox-client --clear-queue')
         [call('rhythmbox-client --play-uri="%s"' % track) for track in list_files(play)]
