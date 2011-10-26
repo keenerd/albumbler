@@ -6,6 +6,8 @@
 import subprocess, os, random, time, sys, ConfigParser, socket
 import cPickle as pickle
 
+# credit EmoSpice
+
 # defaults
 conf = {
     'music_paths': [os.getenv('HOME')],
@@ -41,9 +43,11 @@ def xdg_paths():
     config = j(config, 'albumbler', 'albumbler.config')
     cache = e('XDG_DATA_HOME', j(e('HOME'), '.local/share'))
     cache = j(cache, 'albumbler', 'albumbler.pickle')
-    return config, cache
+    exclude = e('XDG_CONFIG_HOME', j(e('HOME'), '.config'))
+    exclude = j(config, 'albumbler', 'excludes')
+    return config, cache, exclude
 
-config_path, cache_path = xdg_paths()  # probably dumb to do this globally
+config_path, cache_path, exclude_path = xdg_paths()  # probably dumb to do this globally
 
 def call(string):
     pipe = subprocess.PIPE
@@ -58,11 +62,21 @@ def port(number, message):
     sock.close()
     return reply
 
+def load_excludes():
+    excludes = set()
+    if not os.path.isfile(exclude_path):
+        return excludes
+    with open(exclude_path) as f:
+        for line in f:
+            excludes.add(f.strip('\n'))
+    return excludes
+
 def dir_tree(dir_root):
+    excludes = load_excludes()
     tree = list(os.walk(dir_root))
     dirs = [t[0] for t in tree]
     playlists = [os.path.join(t[0],f) for t in tree for f in t[2] if os.path.splitext(f)[1][1:] in conf['playlist_exts']]
-    return dirs + playlists
+    return [p for p in dirs + playlists if p not in excludes]
 
 def reasonable_dir(path):
     "Estimates size of recursive add."
