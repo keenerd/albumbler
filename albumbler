@@ -256,7 +256,7 @@ def emms_cmd(path):
           (emms-stop)
           (with-current-buffer emms-playlist-buffer
             (emms-playlist-clear)
-            (emms-add-directory "%s")
+            (emms-add-directory-tree "%s")
             (beginning-of-buffer)
             (emms-playlist-mode-play-current-track))))
     ''' % path
