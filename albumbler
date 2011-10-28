@@ -42,7 +42,7 @@ def xdg_paths():
     cache = e('XDG_DATA_HOME', j(e('HOME'), '.local/share'))
     cache = j(cache, 'albumbler', 'albumbler.pickle')
     exclude = e('XDG_CONFIG_HOME', j(e('HOME'), '.config'))
-    exclude = j(config, 'albumbler', 'excludes')
+    exclude = j(exclude, 'albumbler', 'excludes')
     return config, cache, exclude
 
 config_path, cache_path, exclude_path = xdg_paths()  # probably dumb to do this globally
@@ -244,6 +244,23 @@ def weighted2(playlist, skiplist):
     #print sorted((b,a) for a,b in playdict.items() if b != 1.0)
     return playdict
 
+def emms_quote(path):
+    "backslash every character to make any shell parameter safe"
+    return reduce(lambda a,c: a+'\\'+c, path, "")
+
+def emms_cmd(path):
+    return '''
+      (progn
+        (require 'emms)
+        (save-excursion
+          (emms-stop)
+          (with-current-buffer emms-playlist-buffer
+            (emms-playlist-clear)
+            (emms-add-directory "%s")
+            (beginning-of-buffer)
+            (emms-playlist-mode-play-current-track))))
+    ''' % path
+
 def play_tunes(play):
     # player : (command, args, args, ...)
     f = {'mocp': ('mocp', '--clear', '--append "%s"' % play, '--play'),
@@ -252,7 +269,9 @@ def play_tunes(play):
          'xmms2': ('nyxmms2', 'remove "*"', 'add "%s"' % play, 'play'),
          'clementine': ('clementine', '-s', '-l "%s"' % play, '-p'),
          'gmusicbrowser':('gmusicbrowser', '-play -playlist "%s"' % play),
-         'mpc': ('mpc', 'clear', 'add "%s"\n' % strip_dirs(play, conf['music_paths']), 'play'),
+         'mpc': ('mpc', 'clear',
+                 'add "%s"\n' % strip_dirs(play, conf['music_paths']), 'play'),
+         'emms': ('emacsclient', '-e %s' % emms_quote(emms_cmd(play))),
         }
     player = conf['player']
     if player not in f:
