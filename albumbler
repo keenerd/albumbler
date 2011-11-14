@@ -254,9 +254,12 @@ def emms_cmd(path):
         (require 'emms)
         (save-excursion
           (emms-stop)
+          (condition-case nil
+              (with-current-buffer emms-playlist-buffer
+                (emms-playlist-clear))
+            (error nil))
+          (emms-add-directory-tree "%s")
           (with-current-buffer emms-playlist-buffer
-            (emms-playlist-clear)
-            (emms-add-directory-tree "%s")
             (beginning-of-buffer)
             (emms-playlist-mode-play-current-track))))
     ''' % path
