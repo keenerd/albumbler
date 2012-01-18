@@ -323,7 +323,7 @@ def main():
     # but some don't template well
     player = conf['player']
     if player == 'mpd':
-        host = os.getenv('MPD_HOST', 'locahost')
+        host = os.getenv('MPD_HOST', 'localhost')
         pnum = os.getenv('MPD_PORT', 6600)
         port(host, pnum, 'clear\n')
         port(host, pnum, 'add "%s"\n' % strip_dirs(play, conf['music_paths']))
