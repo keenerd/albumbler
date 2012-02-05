@@ -68,7 +68,7 @@ def load_excludes():
         return excludes
     with open(exclude_path) as f:
         for line in f:
-            excludes.add(f.strip('\n'))
+            excludes.add(line.strip('\n'))
     return excludes
 
 def dir_tree(dir_root):
