@@ -14,7 +14,8 @@ conf = {
     'min_playlist': 3,
     'notify': 'console',
     'player': 'mocp',
-    'playlist_exts': ['m3u']}
+    'playlist_exts': ['m3u'],
+    'audio_exts': ['mp3','ogg','wav','aiff','aif','m4a','wv','flac','ape']}
 
 """
 playlist is a cached list of all directories/playlists.
@@ -84,10 +85,14 @@ def reasonable_dir(path):
         return True
     length = 0
     for w in os.walk(path):
-        length += len(w[2])
-        if length > conf['max_playlist']:
-            return False
-    return length > conf['min_playlist']
+        for mname in w[2]:
+            if os.path.splitext(mname)[1][1:] in conf['audio_exts']:
+                length += 1
+    if length > conf['max_playlist']:
+        return False
+    if length < conf['min_playlist']:
+        return False
+    return True
 
 def list_files(path):
     "For spoon feeding some players."
@@ -182,6 +187,7 @@ def load_config():
         cp.set('Settings', 'Notify', str(conf['notify']))
         cp.set('Settings', 'Player', str(conf['player']))
         cp.set('Settings', 'PlaylistExts', ','.join(conf['playlist_exts']))
+        cp.set('Settings', 'AudioExts', ','.join(conf['audio_exts']))
         cp.write(open(config_path, 'wb'))
     cp = ConfigParser.RawConfigParser()
     cp.read(config_path)
@@ -197,6 +203,10 @@ def load_config():
         pass
     try:
         conf['min_playlist'] = cp.getint('Settings', 'MinPlaylist')
+    except ConfigParser.NoOptionError:
+        pass
+    try:
+        conf['audio_exts'] = cp.get('Settings', 'AudioExts').split(',')
     except ConfigParser.NoOptionError:
         pass
 
