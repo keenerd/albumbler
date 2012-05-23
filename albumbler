@@ -72,11 +72,14 @@ def load_excludes():
             excludes.add(line.strip('\n'))
     return excludes
 
+def justext(name):
+    return os.path.splitext(name)[1][1:]
+
 def dir_tree(dir_root):
     excludes = load_excludes()
     tree = list(os.walk(dir_root))
     dirs = [t[0] for t in tree]
-    playlists = [os.path.join(t[0],f) for t in tree for f in t[2] if os.path.splitext(f)[1][1:] in conf['playlist_exts']]
+    playlists = [os.path.join(t[0],f) for t in tree for f in t[2] if justext(f) in conf['playlist_exts']]
     return [p for p in dirs + playlists if p not in excludes]
 
 def reasonable_dir(path):
@@ -84,10 +87,8 @@ def reasonable_dir(path):
     if not os.path.isdir(path):  # assume any custom playlists are reasonable
         return True
     length = 0
-    for w in os.walk(path):
-        for mname in w[2]:
-            if os.path.splitext(mname)[1][1:] in conf['audio_exts']:
-                length += 1
+    for p,d,files in os.walk(path):
+        length += sum(justext(f) in conf['audio_exts'] for f in files)
     if length > conf['max_playlist']:
         return False
     if length < conf['min_playlist']:
@@ -97,7 +98,7 @@ def reasonable_dir(path):
 def list_files(path):
     "For spoon feeding some players."
     j = os.path.join
-    if os.path.splitext(path)[1][1:] in conf['playlist_exts']:
+    if justext(path) in conf['playlist_exts']:
         dn = os.path.dirname(path)
         return [j(dn, track) for track in  open(path).read().split('\n')]
     if not os.path.isdir(path):
