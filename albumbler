@@ -5,6 +5,9 @@
 
 import subprocess, os, random, time, sys, ConfigParser, socket
 import cPickle as pickle
+try:
+    import mpd
+except: pass
 
 # defaults
 conf = {
@@ -102,6 +105,24 @@ class BaseDirProvider(DirectoryProvider):
                     track = track[1:]
                 return track
         return track
+
+class MPDAlbumsProvider(PlaylistProvider):
+    def is_reasonable(self, item):
+        return True
+
+    def to_str(self, item):
+        return "%s - %s" % item
+
+    def gen_playlist(self):
+        mpdc = mpd_conn();
+        albumlist = []
+        all_artists = mpdc.list('artist')
+        for ar in all_artists:
+            albums = mpdc.list('album', 'artist', ar)
+            for al in albums:
+                albumlist.append((ar, al))
+        mpdc.disconnect()
+        return albumlist
 
 ########################### End Playlist Providers ############################
 
@@ -223,12 +244,15 @@ def load_config():
     conf['notify'] = cp.get('Settings', 'Notify')
     conf['player'] = cp.get('Settings', 'Player')
 
-    if conf['player'] in ['rhythmbox', 'audacious']:
+    if conf['player'] == 'mpd_albums':
+        provider = MPDAlbumsProvider()
+    elif conf['player'] in ['rhythmbox', 'audacious']:
         provider = SpoonFeedProvider()
-    elif conf['player'] == 'mpd':
-        provider = BaseDirProvider()
     else:
-        provider = DirectoryProvider()
+        if conf['player'] in ['mpd_dirs', 'mpd']:
+            provider = BaseDirProvider()
+        else:
+            provider = DirectoryProvider()
 
     # make a graceful upgrade path
     try:
@@ -308,6 +332,13 @@ def emms_cmd(path):
             (emms-playlist-mode-play-current-track))))
     ''' % path
 
+def mpd_conn():
+    host = os.getenv('MPD_HOST', 'localhost')
+    pnum = os.getenv('MPD_PORT', 6600)
+    mpdc = mpd.MPDClient()
+    mpdc.connect(host, pnum)
+    return mpdc
+
 def play_tunes(play):
     # player : (command, args, args, ...)
     if isinstance(provider, DirectoryProvider):
@@ -325,11 +356,12 @@ def play_tunes(play):
         command = f[player][0]
         [call('%s %s' % (command, arg)) for arg in f[player][1:]]
     elif isinstance(provider, BaseDirProvider):
-        host = os.getenv('MPD_HOST', 'localhost')
-        pnum = os.getenv('MPD_PORT', 6600)
-        port(host, pnum, 'clear\n')
-        port(host, pnum, 'add "%s"\n' % provider.strip_dirs(play, conf['music_paths']))
-        port(host, pnum, 'play\n')
+        # only mpd_dirs for now
+        mpdc = mpd_conn()
+        mpdc.clear()
+        mpdc.add(provider.strip_dirs(play, conf['music_paths']))
+        mpdc.play()
+        mpdc.disconnect()
     elif isinstance(provider, SpoonFeedProvider):
         if player == 'rhythmbox':
             call('rhythmbox-client --clear-queue')
@@ -341,6 +373,12 @@ def play_tunes(play):
             [call('audtool --playlist-addurl "%s"' % track)
                 for track in provider.list_files(play)]
             call('audtool --playback-play')
+    elif isinstance(provider, MPDAlbumsProvider):
+        mpdc = mpd_conn()
+        mpdc.clear()
+        mpdc.findadd('artist', play[0], 'album', play[1])
+        mpdc.play()
+        mpdc.disconnect()
 
 def main():
     load_config()
