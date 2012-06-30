@@ -35,6 +35,76 @@ Anything less than time_window is considered as skipped.
 # tapered dislike between 1 minute and 1 hour
 # make some sort of album fingerprinting
 
+############################### Playlist Providers ############################
+
+provider = None
+
+class PlaylistProvider:
+    def is_reasonable(self, item):
+        "Is item a reasonable choice?"
+        return True
+    def to_str(self, item):
+        "String representation of item"
+        return item.__str__()
+    def gen_playlist(self):
+        "Generate and return the playlist"
+        return []
+
+class DirectoryProvider(PlaylistProvider):
+    def justext(name):
+        return os.path.splitext(name)[1][1:]
+
+    def is_reasonable(self, path):
+        "Estimates size of recursive add."
+        if not os.path.isdir(path):  # assume any custom playlists are reasonable
+            return True
+        length = 0
+        for p, d, files in os.walk(path):
+            length += sum(self.justext(f) in conf['audio_exts'] for f in files)
+        if length > conf['max_playlist']:
+            return False
+        if length < conf['min_playlist']:
+            return False
+        return True
+
+    def dir_tree(self, dir_root):
+        excludes = load_excludes()
+        tree = list(os.walk(dir_root))
+        dirs = [t[0] for t in tree]
+        playlists = [os.path.join(t[0],f) for t in tree
+            for f in t[2] if self.justext(f) in conf['playlist_exts']]
+        return [p for p in dirs + playlists if p not in excludes]
+
+    def gen_playlist(self):
+        playlist = []
+        print 'Walking', conf['music_paths']
+        [playlist.extend(self.dir_tree(mp)) for mp in conf['music_paths']]
+        return playlist
+
+class SpoonFeedProvider(DirectoryProvider):
+    def list_files(self, path):
+        "For spoon feeding some players."
+        j = os.path.join
+        if self.justext(path) in conf['playlist_exts']:
+            dn = os.path.dirname(path)
+            return [j(dn, track) for track in  open(path).read().split('\n')]
+        if not os.path.isdir(path):
+            return ''
+        return [os.path.join(p,f) for p,d,files in os.walk(path) for f in files]
+
+class BaseDirProvider(DirectoryProvider):
+    def strip_dirs(track, dirs):
+        # fix yucky nesting
+        for d in dirs:
+            if track.startswith(d):
+                track = track[len(d):]
+                if track.startswith('/'):
+                    track = track[1:]
+                return track
+        return track
+
+########################### End Playlist Providers ############################
+
 def xdg_paths():
     j = os.path.join
     e = os.getenv
@@ -72,55 +142,10 @@ def load_excludes():
             excludes.add(line.strip('\n'))
     return excludes
 
-def justext(name):
-    return os.path.splitext(name)[1][1:]
-
-def dir_tree(dir_root):
-    excludes = load_excludes()
-    tree = list(os.walk(dir_root))
-    dirs = [t[0] for t in tree]
-    playlists = [os.path.join(t[0],f) for t in tree for f in t[2] if justext(f) in conf['playlist_exts']]
-    return [p for p in dirs + playlists if p not in excludes]
-
-def reasonable_dir(path):
-    "Estimates size of recursive add."
-    if not os.path.isdir(path):  # assume any custom playlists are reasonable
-        return True
-    length = 0
-    for p,d,files in os.walk(path):
-        length += sum(justext(f) in conf['audio_exts'] for f in files)
-    if length > conf['max_playlist']:
-        return False
-    if length < conf['min_playlist']:
-        return False
-    return True
-
-def list_files(path):
-    "For spoon feeding some players."
-    j = os.path.join
-    if justext(path) in conf['playlist_exts']:
-        dn = os.path.dirname(path)
-        return [j(dn, track) for track in  open(path).read().split('\n')]
-    if not os.path.isdir(path):
-        return ''
-    return [os.path.join(p,f) for p,d,files in os.walk(path) for f in files]
-
-def strip_dirs(track, dirs):
-    # fix yucky nesting
-    for d in dirs:
-        if track.startswith(d):
-            track = track[len(d):]
-            if track.startswith('/'):
-                track = track[1:]
-            return track
-    return track
-
 def resync():
     playlist, skiplist = load_cache()
     old_len = len(playlist)
-    playlist = []
-    print 'Walking', conf['music_paths']
-    [playlist.extend(dir_tree(mp)) for mp in conf['music_paths']]
+    playlist = provider.gen_playlist()
     pickle.dump((playlist, skiplist), open(cache_path, 'wb'), -1)
     new_len = len(playlist)
     print 'Index: added %i, total %i' % (new_len-old_len, new_len)
@@ -143,13 +168,13 @@ def show_favorites():
     fav_tally.sort()
     fav_tally.reverse()
     for c,f in fav_tally[:100]:
-        print f
+        print provider.to_str(f)
 
 def show_worst():
     fav_tally = ranking()
     fav_tally.sort()
     for c,f in fav_tally[:100]:
-        print f
+        print provider.to_str(f)
 
 def update_skiplist(playlist, skiplist, play):
     now_time = time.time()
@@ -174,7 +199,7 @@ def load_cache():
     return pickle.load(open(cache_path, 'rb'))
 
 def load_config():
-    global conf
+    global conf, provider
     cp = ConfigParser.RawConfigParser()
     if not os.path.isdir(os.path.dirname(config_path)):
         os.makedirs(os.path.dirname(config_path))
@@ -197,6 +222,14 @@ def load_config():
     conf['max_playlist'] = cp.getint('Settings', 'MaxPlaylist')
     conf['notify'] = cp.get('Settings', 'Notify')
     conf['player'] = cp.get('Settings', 'Player')
+
+    if conf['player'] in ['rhythmbox', 'audacious']:
+        provider = SpoonFeedProvider()
+    elif conf['player'] == 'mpd':
+        provider = BaseDirProvider()
+    else:
+        provider = DirectoryProvider()
+
     # make a graceful upgrade path
     try:
         conf['playlist_exts'] = cp.get('Settings', 'PlaylistExts').split(',')
@@ -218,7 +251,7 @@ def scale_many(d, scale, paths):
     return d
 
 def weighted2(playlist, skiplist):
-    playdict = dict((path, 1.0) for path in playlist)
+    playdict = dict((play, 1.0) for play in playlist)
     if len(skiplist) == 0:
         # first time user
         return playdict
@@ -277,21 +310,37 @@ def emms_cmd(path):
 
 def play_tunes(play):
     # player : (command, args, args, ...)
-    f = {'mocp': ('mocp', '--clear', '--append "%s"' % play, '--play'),
-         'cmus': ('cmus-remote', '-c', '"%s"' % play,
-                  '-C "view 3" "win-activate"'),
-         'xmms2': ('nyxmms2', 'remove "*"', 'add "%s"' % play, 'play'),
-         'clementine': ('clementine', '-s', '-l "%s"' % play, '-p'),
-         'gmusicbrowser':('gmusicbrowser', '-play -playlist "%s"' % play),
-         'mpc': ('mpc', 'clear',
-                 'add "%s"\n' % strip_dirs(play, conf['music_paths']), 'play'),
-         'emms': ('emacsclient', '-e %s' % emms_quote(emms_cmd(play))),
-        }
-    player = conf['player']
-    if player not in f:
-        return
-    command = f[player][0]
-    [call('%s %s' % (command, arg)) for arg in f[player][1:]]
+    if isinstance(provider, DirectoryProvider):
+        f = {'mocp': ('mocp', '--clear', '--append "%s"' % play, '--play'),
+             'cmus': ('cmus-remote', '-c', '"%s"' % play,
+                      '-C "view 3" "win-activate"'),
+             'xmms2': ('nyxmms2', 'remove "*"', 'add "%s"' % play, 'play'),
+             'clementine': ('clementine', '-s', '-l "%s"' % play, '-p'),
+             'gmusicbrowser':('gmusicbrowser', '-play -playlist "%s"' % play),
+             'mpc': ('mpc', 'clear',
+                     'add "%s"\n' % strip_dirs(play, conf['music_paths']), 'play'),
+             'emms': ('emacsclient', '-e %s' % emms_quote(emms_cmd(play))),
+            }
+        player = conf['player']
+        command = f[player][0]
+        [call('%s %s' % (command, arg)) for arg in f[player][1:]]
+    elif isinstance(provider, BaseDirProvider):
+        host = os.getenv('MPD_HOST', 'localhost')
+        pnum = os.getenv('MPD_PORT', 6600)
+        port(host, pnum, 'clear\n')
+        port(host, pnum, 'add "%s"\n' % provider.strip_dirs(play, conf['music_paths']))
+        port(host, pnum, 'play\n')
+    elif isinstance(provider, SpoonFeedProvider):
+        if player == 'rhythmbox':
+            call('rhythmbox-client --clear-queue')
+            [call('rhythmbox-client --play-uri="%s"' % track)
+                for track in provider.list_files(play)]
+            call('rhythmbox-client --play')
+        elif player == 'audacious':
+            call('audtool --playlist-clear')
+            [call('audtool --playlist-addurl "%s"' % track)
+                for track in provider.list_files(play)]
+            call('audtool --playback-play')
 
 def main():
     load_config()
@@ -316,38 +365,23 @@ def main():
     while True:
         play = random.choice(playdict.keys())
         odds = playdict[play]
-        if not reasonable_dir(play):
+        if not provider.is_reasonable(play):
             playdict[play] = 0.0
             continue
         if random.random() < odds:
             break
     update_skiplist(playlist, skiplist, play)
-    
+
     # add parallel notifications
-    message = 'Now Playing: %s' % os.path.basename(play)
+    message = 'Now Playing: %s' % provider.to_str(play)
     if conf['notify'] == 'console':
         print message
     if conf['notify'] == 'notify-send':
         call('notify-send -a albumbler "%s"' % message)
     if conf['notify'] == 'ratpoison':
         call('ratpoison -c "echo %s"' % message)
+
     play_tunes(play)
-    # but some don't template well
-    player = conf['player']
-    if player == 'mpd':
-        host = os.getenv('MPD_HOST', 'localhost')
-        pnum = os.getenv('MPD_PORT', 6600)
-        port(host, pnum, 'clear\n')
-        port(host, pnum, 'add "%s"\n' % strip_dirs(play, conf['music_paths']))
-        port(host, pnum, 'play\n')
-    if player == 'rhythmbox':
-        call('rhythmbox-client --clear-queue')
-        [call('rhythmbox-client --play-uri="%s"' % track) for track in list_files(play)]
-        call('rhythmbox-client --play')
-    if player == 'audacious':
-        call('audtool --playlist-clear')
-        [call('audtool --playlist-addurl "%s"' % track) for track in list_files(play)]
-        call('audtool --playback-play')
 
 if __name__ == '__main__':
     main()
