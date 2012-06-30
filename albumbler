@@ -324,12 +324,13 @@ def main():
     update_skiplist(playlist, skiplist, play)
     
     # add parallel notifications
+    message = 'Now Playing: %s' % os.path.basename(play)
     if conf['notify'] == 'console':
-        print play
+        print message
     if conf['notify'] == 'notify-send':
-        call('notify-send "Now Playing: %s"' % os.path.basename(play))
+        call('notify-send -a albumbler "%s"' % message)
     if conf['notify'] == 'ratpoison':
-        call('ratpoison -c "echo Now Playing: %s"' % os.path.basename(play))
+        call('ratpoison -c "echo %s"' % message)
     play_tunes(play)
     # but some don't template well
     player = conf['player']
