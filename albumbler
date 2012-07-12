@@ -292,7 +292,7 @@ def scale_many(d, scale, paths):
             d[p] *= scale
     return d
 
-def weighted2(albumlist, skiplist):
+def weighted(albumlist, skiplist):
     albumdict = dict((path, 1.0) for path in albumlist)
     if len(skiplist) == 0:
         # first time user
@@ -306,28 +306,31 @@ def weighted2(albumlist, skiplist):
         return albumdict
     # called multiple times, do the fancy stuff
     recent = set(skiplist[-1][:-1])
-    dislikes = [recent]
-    all_dislikes = set(recent)
-    all_skipped = [set(skips[:-2]) for skips in skiplist]
-    # walk the map, discard repeats
-    while dislikes[-1]:
-        associated = set([])
-        [associated.update(skips) for skips in all_skipped if skips & dislikes[-1]]
-        associated.difference_update(all_dislikes)
-        #print len(dislikes[-1]), len(associated), len(all_dislikes)
-        dislikes.append(associated)
-        all_dislikes.update(associated)
-    # dislikes now holds map distances
-    # todo: distance never above 4?
-    dis_fn = lambda x: (2**x-1)/(2.0**x)
-    for i,d in enumerate(dislikes):
-        albumdict = scale_many(albumdict, dis_fn(i), d)
-    # avoid things similar to recent
-    #all_skipped = [set(skips[:-2]) for skips in skiplist]
-    #similar = [p for skips in all_skipped if skips & recent for p in skips]
-    # todo: be fancy and compute each distance to recent
-    #albumdict = scale_many(albumdict, 0.50, similar)
-    #print sorted((b,a) for a,b in albumdict.items() if b != 1.0)
+    # no repeats
+    albumdict = scale_many(albumdict, 0, recent)
+    # first order inference
+    multiples = 0
+    for skips in skiplist[:-1]:  # ignore recent
+        skips = set(skips[:-2])  # drop liked and time
+        common = skips & recent
+        overlap = len(list(common))
+        if overlap == 0:
+            continue
+        factor = 0.5 ** overlap
+        albumdict = scale_many(albumdict, factor, skips)
+        multiplies += overlap
+        # need to normalize at least every 1074 to avoid underflow
+        if multiplies > 200:
+            albumdict = normalize(albumdict)
+            multiplies -= 200
+    return albumdict
+
+def normalize(albumdict):
+    "simple weight functions tend to push everything close to zero"
+    if all(v == 0.0 for v in albumdict.itervalues()):
+        return dict((k,1.0) for k in albumduct)
+    while all(v < 0.5 for v in albumdict.itervalues()):
+        albumdict.update((k,v*2) for k,v in albumdict.iteritems())
     return albumdict
 
 def emms_quote(path):
@@ -407,6 +410,12 @@ def dump_cache():
         print '    %s,' % repr(skips)
     print '])'
 
+def dump_scores(albumdict):
+    print '{'
+    for k,v in albumdict.items():
+        print '    %s: %s,' % (repr(k), repr(v))
+    print '}'
+
 def main():
     load_config()
     music_player = MusicPlayer()
@@ -434,7 +443,8 @@ def main():
         print 'Set musicpath in %s' % config_path
         print 'And run "albumbler sync"'
         return
-    albumdict = weighted2(albumlist, skiplist)
+    albumdict = weighted(albumlist, skiplist)
+    albumdict = normalize(albumdict)
     while True:
         album = random.choice(albumdict.keys())
         odds = albumdict[album]
