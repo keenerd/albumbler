@@ -357,9 +357,9 @@ def play_tunes(album):
          'xmms2': ('nyxmms2', 'remove "*"', 'add "%s"' % album, 'play'),
          'clementine': ('clementine', '-s', '-l "%s"' % album, '-p'),
          'gmusicbrowser':('gmusicbrowser', '-play -playlist "%s"' % album),
-         'mpc_dirs': ('mpc', 'clear',
-                      'add "%s"\n' % strip_dirs(album, conf['music_paths']),
-                      'play'),
+         'mpc': ('mpc', 'clear',
+                 'add "%s"\n' % strip_dirs(album, conf['music_paths']),
+                 'play'),
          'emms': ('emacsclient', '-e %s' % emms_quote(emms_cmd(album))),
         }
     player = conf['player']
@@ -371,7 +371,7 @@ def play_tunes(album):
 def play_bad_tunes(album):
     "some players don't template well"
     player = conf['player']
-    if player == 'mpd_dirs':
+    if player == 'mpd':
         host, pnum = mpd_port()
         port(host, pnum, 'clear\n')
         port(host, pnum, 'add "%s"\n' % strip_dirs(album, conf['music_paths']))
@@ -412,7 +412,7 @@ def dump_scores(albumdict):
 def main():
     load_config()
     music_player = MusicPlayer()
-    if conf['player'] == 'mpd':
+    if conf['player'] == 'mpd_albums':
         music_player = MpdPlayer()
     # use real argv parsing
     if len(sys.argv) == 2:
