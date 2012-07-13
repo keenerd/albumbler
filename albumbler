@@ -25,11 +25,11 @@ conf = {
     'audio_exts': ['mp3','ogg','wav','aiff','aif','m4a','wv','flac','ape']}
 
 """
-albumlist is a cached list of all directories/playlists.
+albumlist is a cached list of all directories/playlists/albums.
 
 skiplist is a list of what/when was played
 [ [skipped, skipped, skipped, listened, time], ... ]
-Anything less than time_window is considered as skipped.
+Any delta t less than time_window is considered as skipped.
 """
 
 # support for more players
@@ -42,41 +42,17 @@ Anything less than time_window is considered as skipped.
 # tapered dislike between 1 minute and 1 hour
 
 class MusicPlayer(object):
-    "very important to set .album"
-    def __init__(self):
-        self._album = None
     def resync(self, nuke=False):
         resync(nuke)
     def filter(self, albumlist):
         return [a for a in albumlist if type(a) == str]
-    @property
-    def album(self):
-        assert self._album is not None
-        return self._album
-    @album.setter
-    def album(self, val):
-        self._album = val
-    def reasonable(self):
-        return reasonable_dir(self.album)
-    def message(self):
-        return 'Now Playing: %s' % os.path.basename(self.album)
-    def play_tunes(self):
-        play_tunes(self.album)
-        # but some don't template well
-        player = conf['player']
-        if player == 'mpd_dirs':
-            host, pnum = mpd_port()
-            port(host, pnum, 'clear\n')
-            port(host, pnum, 'add "%s"\n' % strip_dirs(play, conf['music_paths']))
-            port(host, pnum, 'play\n')
-        if player == 'rhythmbox':
-            call('rhythmbox-client --clear-queue')
-            [call('rhythmbox-client --play-uri="%s"' % track) for track in list_files(play)]
-            call('rhythmbox-client --play')
-        if player == 'audacious':
-            call('audtool --playlist-clear')
-            [call('audtool --playlist-addurl "%s"' % track) for track in list_files(play)]
-            call('audtool --playback-play')
+    def reasonable(self, album):
+        return reasonable_dir(album)
+    def message(self, album):
+        return 'Now Playing: %s' % os.path.basename(album)
+    def play_tunes(self, album):
+        play_tunes(album)
+        play_bad_tunes(album)
 
 class MpdPlayer(MusicPlayer):
     def resync(self, nuke=False):
@@ -92,15 +68,15 @@ class MpdPlayer(MusicPlayer):
         print 'Index: added %i, total %i' % (new_len-old_len, new_len)
     def filter(self, albumlist):
         return [a for a in albumlist if type(a) == tuple]
-    def reasonable(self):
+    def reasonable(self, album):
         return True
-    def message(self):
-        return "Now Playing: %s - %s" % self.album
-    def play_tunes(self):
+    def message(self, album):
+        return "Now Playing: %s - %s" % album
+    def play_tunes(self, album):
         mpdc = mpd_init()
         mpdc.clear()
         # todo - check if album still exists
-        mpdc.findadd('artist', self.album[0], 'album', self.album[1])
+        mpdc.findadd('artist', album[0], 'album', album[1])
         mpdc.play()
         mpdc.disconnect()
 
@@ -179,13 +155,13 @@ def list_files(path):
     return [os.path.join(p,f) for p,d,files in os.walk(path) for f in files]
 
 def strip_dirs(track, dirs):
-    # fix yucky nesting
     for d in dirs:
-        if track.startswith(d):
-            track = track[len(d):]
-            if track.startswith('/'):
-                track = track[1:]
-            return track
+        if not track.startswith(d):
+            continue
+        track = track[len(d):]
+        if track.startswith('/'):
+            track = track[1:]
+        return track
     return track
 
 def resync(nuke=False):
@@ -249,6 +225,7 @@ def load_cache():
     return pickle.load(open(cache_path, 'rb'))
 
 def load_config():
+    "sets global 'conf' dictionary"
     global conf
     cp = ConfigParser.RawConfigParser()
     if not os.path.isdir(os.path.dirname(config_path)):
@@ -286,10 +263,8 @@ def load_config():
     except ConfigParser.NoOptionError:
         pass
 
-def scale_many(d, scale, paths):
-    for p in paths:
-        if p in d:
-            d[p] *= scale
+def scale_many(d, scale, keys):
+    d.update( (k, d[k]*scale) for k in d if k in keys)
     return d
 
 def weighted(albumlist, skiplist):
@@ -309,7 +284,7 @@ def weighted(albumlist, skiplist):
     # no repeats
     albumdict = scale_many(albumdict, 0, recent)
     # first order inference
-    multiples = 0
+    multiplies = 0
     for skips in skiplist[:-1]:  # ignore recent
         skips = set(skips[:-2])  # drop liked and time
         common = skips & recent
@@ -383,7 +358,8 @@ def play_tunes(album):
          'clementine': ('clementine', '-s', '-l "%s"' % album, '-p'),
          'gmusicbrowser':('gmusicbrowser', '-play -playlist "%s"' % album),
          'mpc_dirs': ('mpc', 'clear',
-                      'add "%s"\n' % strip_dirs(album, conf['music_paths']), 'play'),
+                      'add "%s"\n' % strip_dirs(album, conf['music_paths']),
+                      'play'),
          'emms': ('emacsclient', '-e %s' % emms_quote(emms_cmd(album))),
         }
     player = conf['player']
@@ -391,6 +367,23 @@ def play_tunes(album):
         return
     command = f[player][0]
     [call('%s %s' % (command, arg)) for arg in f[player][1:]]
+
+def play_bad_tunes(album):
+    "some players don't template well"
+    player = conf['player']
+    if player == 'mpd_dirs':
+        host, pnum = mpd_port()
+        port(host, pnum, 'clear\n')
+        port(host, pnum, 'add "%s"\n' % strip_dirs(album, conf['music_paths']))
+        port(host, pnum, 'play\n')
+    if player == 'rhythmbox':
+        call('rhythmbox-client --clear-queue')
+        [call('rhythmbox-client --play-uri="%s"' % track) for track in list_files(album)]
+        call('rhythmbox-client --play')
+    if player == 'audacious':
+        call('audtool --playlist-clear')
+        [call('audtool --playlist-addurl "%s"' % track) for track in list_files(album)]
+        call('audtool --playback-play')
 
 def notify(message):
     if conf['notify'] == 'console':
@@ -448,16 +441,15 @@ def main():
     while True:
         album = random.choice(albumdict.keys())
         odds = albumdict[album]
-        if not reasonable_dir(album):
+        if not music_player.reasonable(album):
             albumdict[album] = 0.0
             continue
         if random.random() < odds:
             break
     
     update_skiplist(albumlist, skiplist, album)
-    music_player.album = album
-    notify(music_player.message())
-    music_player.play_tunes()
+    notify(music_player.message(album))
+    music_player.play_tunes(album)
 
 if __name__ == '__main__':
     main()
