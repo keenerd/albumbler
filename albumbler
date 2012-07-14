@@ -133,16 +133,16 @@ def dir_tree(dir_root):
 
 def reasonable_dir(path):
     "Estimates size of recursive add."
-    if not os.path.isdir(path):  # assume any custom playlists are reasonable
+    # forgot to mount the share/drive/dap 
+    if not os.path.exists(path):
+        return False
+    # assume any custom playlists are reasonable
+    if not os.path.isdir(path):
         return True
     length = 0
     for p,d,files in os.walk(path):
         length += sum(justext(f) in conf['audio_exts'] for f in files)
-    if length > conf['max_playlist']:
-        return False
-    if length < conf['min_playlist']:
-        return False
-    return True
+    return conf['min_playlist'] < length < conf['max_playlist']
 
 def list_files(path):
     "For spoon feeding some players."
@@ -353,7 +353,7 @@ def play_tunes(album):
     # player : (command, args, args, ...)
     f = {'mocp': ('mocp', '--clear', '--append "%s"' % album, '--play'),
          'cmus': ('cmus-remote', '-c', '"%s"' % album,
-                  '-C "view 3" "win-activate"'),
+                  '-C "view 3" "win-sel-cur" "win-activate"'),
          'xmms2': ('nyxmms2', 'remove "*"', 'add "%s"' % album, 'play'),
          'clementine': ('clementine', '-s', '-l "%s"' % album, '-p'),
          'gmusicbrowser':('gmusicbrowser', '-play -playlist "%s"' % album),
