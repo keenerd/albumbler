@@ -39,7 +39,6 @@ Any delta t less than time_window is considered as skipped.
 # rewrite in not python?
 # context sensitive?
 # add -forget
-# tapered dislike between 1 minute and 1 hour
 
 class MusicPlayer(object):
     def resync(self, nuke=False):
@@ -274,6 +273,7 @@ def weighted(albumlist, skiplist):
         return albumdict
     now_time = time.time()
     last_time = skiplist[-1][-1]
+    albumdict = time_decay(albumdict, skiplist)
     if now_time - last_time > conf['time_window']:
         # start new session, avoid common
         all_heard = (p for skips in skiplist for p in skips[:-1])
@@ -300,6 +300,24 @@ def weighted(albumlist, skiplist):
             multiplies -= 200
     return albumdict
 
+def time_decay(albumdict, skiplist):
+    "applies a gradual falloff between time_window and 1 hour"
+    tw = conf['time_window']
+    if tw > 3600:
+        return albumdict
+    now_time = time.time()
+    falloff = lambda dt: (dt-tw) * 1.0 / (3600 - tw) 
+    for skips in reversed(skiplist):
+        dt = now_time - skips[-1]
+        if dt > 3600:
+            break
+        factor = falloff(dt)
+        factor = max(factor, 0.0)
+        # including the liked track for now, see how that works out
+        albumdict = scale_many(albumdict, factor, skips)
+    albumdict = normalize(albumdict)
+    return albumdict
+        
 def normalize(albumdict):
     "simple weight functions tend to push everything close to zero"
     if all(v == 0.0 for v in albumdict.itervalues()):
