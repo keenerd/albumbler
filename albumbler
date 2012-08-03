@@ -30,6 +30,8 @@ albumlist is a cached list of all directories/playlists/albums.
 skiplist is a list of what/when was played
 [ [skipped, skipped, skipped, listened, time], ... ]
 Any delta t less than time_window is considered as skipped.
+
+Albums are strings, but can be (artist, album) tuples for mpd_albums.
 """
 
 # support for more players
@@ -41,8 +43,8 @@ Any delta t less than time_window is considered as skipped.
 # add -forget
 
 class MusicPlayer(object):
-    def resync(self, nuke=False):
-        resync(nuke)
+    def resync(self, **kwargs):
+        resync(**kwargs)
     def filter(self, albumlist):
         return [a for a in albumlist if type(a) == str]
     def reasonable(self, album):
@@ -54,10 +56,10 @@ class MusicPlayer(object):
         play_bad_tunes(album)
 
 class MpdPlayer(MusicPlayer):
-    def resync(self, nuke=False):
+    def resync(self, **kwargs):
         albumlist, skiplist = load_cache()
         old_len = len(albumlist)
-        if nuke:
+        if kwargs['nuke']:
             albumlist = []
         print 'Querying library'
         albumlist.extend(mpd_library())
@@ -154,6 +156,8 @@ def list_files(path):
     return [os.path.join(p,f) for p,d,files in os.walk(path) for f in files]
 
 def strip_dirs(track, dirs):
+    if type(track) != str:
+        return track
     for d in dirs:
         if not track.startswith(d):
             continue
@@ -163,13 +167,27 @@ def strip_dirs(track, dirs):
         return track
     return track
 
-def resync(nuke=False):
+def unstrip_dirs(album):
+    "undo relative paths"
+    if type(album) != str:
+        return album
+    for basepath in conf['music_paths']:
+        album2 = os.path.join(basepath, album)
+        if reasonable_dir(album2):
+            return album2
+    return album
+
+def resync(nuke=False, relative=False):
     albumlist, skiplist = load_cache()
     old_len = len(albumlist)
     if nuke:
         albumlist = []
     print 'Walking', conf['music_paths']
     [albumlist.extend(dir_tree(mp)) for mp in conf['music_paths']]
+    if relative:
+        strip = lambda a: strip_dirs(a, conf['music_paths'])
+        albumlist = [strip(a) for a in albumlist]
+        skiplist  = [[strip(a) for a in skips]for skips in skiplist] 
     albumlist = list(set(albumlist))
     save_cache(albumlist, skiplist)
     new_len = len(albumlist)
@@ -433,20 +451,23 @@ def main():
     if conf['player'] == 'mpd_albums':
         music_player = MpdPlayer()
     # use real argv parsing
-    if len(sys.argv) == 2:
-        if sys.argv[1] == 'sync':
-            music_player.resync()
-        elif sys.argv[1] == 'hardsync':
-            music_player.resync(nuke=True)
-        elif sys.argv[1] == 'best':
+    if len(sys.argv) > 1:
+        relative = 'relative' in sys.argv
+        nuke = 'hard' in sys.argv
+        if 'sync' in sys.argv: 
+            music_player.resync(nuke=nuke, relative=relative)
+        elif 'best' in sys.argv:
             show_favorites()
-        elif sys.argv[1] == 'worst':
+        elif 'worst' in sys.argv:
             show_worst()
-        elif sys.argv[1] == 'dump':
+        elif 'dump' in sys.argv:
             dump_cache()
         else:
-            print "Supported options are 'sync', 'hardsync', 'best' or 'worst'."
-            print "For normal use, call without any options."
+            print "Supported options are 'sync', 'best' or 'worst'."
+            print "Also 'hard sync', 'relative sync' and 'relative hard sync'."
+            print "Note that 'hard' (clears old database) and 'relative' "
+            print "(use relative paths) are destructive."
+            print "\nFor normal use, call without any options.\n"
         return
     albumlist, skiplist = load_cache()
     albumlist = music_player.filter(albumlist)
@@ -459,7 +480,8 @@ def main():
     while True:
         album = random.choice(albumdict.keys())
         odds = albumdict[album]
-        if not music_player.reasonable(album):
+        absolute_album = unstrip_dirs(album)
+        if not music_player.reasonable(absolute_album):
             albumdict[album] = 0.0
             continue
         if random.random() < odds:
@@ -467,7 +489,7 @@ def main():
     
     update_skiplist(albumlist, skiplist, album)
     notify(music_player.message(album))
-    music_player.play_tunes(album)
+    music_player.play_tunes(absolute_album)
 
 if __name__ == '__main__':
     main()
